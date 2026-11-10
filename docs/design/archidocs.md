@@ -156,6 +156,8 @@ MD → frontmatter YAML; HTML → `<meta name="artifact:<campo>" content="…">`
 | `doctor` | | diagnóstico: Node, Chrome (`ARCHIFY_CHROME`), symlinks por agente, credenciales, estado del checkout | Solo lectura |
 | `update` | | mueve el checkout de skills al último tag | Explícito, nunca automático |
 
+Comandos añadidos en la implementación de la fase 1: `init --remote` (configuración de usuario en `~/.config/archidocs/config.json`), `standard` y `template <tipo>` (leen el estándar de la versión publicada, así las skills no dependen de rutas locales), `get <ruta>` (descarga la versión actual y su `--if-match`), `module create|describe`, `modules`, `log`. Publicar sobre un artifact existente exige `--if-match` (CAS) u `--overwrite` explícito. La configuración de la instancia (sitios, rama, `allow_public`) vive en `archidocs.config.json` en la raíz del repo. Códigos de salida: 2 validación, 3 conflicto, 4 sin permiso, 5 git, 6 timeout del deploy, 7 módulo inexistente, 8 repo público no permitido, 9 fidelidad insuficiente.
+
 Errores git clasificados: rechazo por desfase → `pull --rebase` + reintento (máx. 3, backoff con jitter); conflicto → aborta y reporta; 401/403 → para y explica (credenciales, CAP); nunca `--force`, nunca `reset --hard` sobre trabajo ajeno, ref de respaldo antes de operar.
 
 ### 5.5 Sitio generado

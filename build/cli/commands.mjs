@@ -200,9 +200,13 @@ export async function validate(opts, [file]) {
   const { ref } = await contentRoot();
   const standardDef = JSON.parse(showFile(ref, "standard/standard.json"));
   const text = await readFile(resolve(file), "utf8");
-  const { meta, error } = readMeta(format, text);
+  const { meta: raw, error } = readMeta(format, text);
+  // Valida lo que se publicaría: autor, fechas y versión del estándar los completa el CLI.
+  const meta = fillMeta(raw, { author: gitUserName(), today: today(), standardVersion: standardDef.version });
+  const autofilled = ["author", "created", "updated"].filter((f) => !raw[f]);
   const res = validateArtifact(format, text, meta, standardDef);
   if (error) res.errors.unshift(error);
+  if (autofilled.length) res.warnings.push(`se completarán al publicar: ${autofilled.join(", ")}`);
   return { file, format, meta, ...res, ok: res.errors.length === 0 };
 }
 
