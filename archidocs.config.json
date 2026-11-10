@@ -3,7 +3,7 @@
   "branch": "main",
   "sites": {
     "pages": "https://svallejo-dev.github.io/archidocs",
-    "cloudflare": "https://archidocs.archidocs.workers.dev"
+    "cloudflare": "https://docs.archidocs.workers.dev"
   },
   "allow_public": true
 }
