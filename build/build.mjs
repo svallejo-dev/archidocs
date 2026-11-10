@@ -8,6 +8,7 @@ import { renderMarkdown } from "./lib/markdown.mjs";
 import {
   catalogPage, htmlArtifactPage, markdownArtifactPage, modulePage, notFoundPage, quarantinePage, redirectPage,
 } from "./lib/pages.mjs";
+import { searchIndex } from "./lib/search.mjs";
 
 const args = process.argv.slice(2);
 const out = args.includes("--out") ? args[args.indexOf("--out") + 1] : "_site";
@@ -51,6 +52,7 @@ async function writeVendor() {
   await mkdir(join(outDir, "_archidocs", "vendor"), { recursive: true });
   await copyFile(join(root, "standard", "ui", "v1", "ui.css"), join(outDir, "_archidocs", "v1", "ui.css"));
   await copyFile(join(root, "build", "site.css"), join(outDir, "_archidocs", "site.css"));
+  await copyFile(join(root, "build", "site.js"), join(outDir, "_archidocs", "site.js"));
   await copyFile(pkgFile("mermaid/dist/mermaid.min.js"), join(outDir, "_archidocs", "vendor", "mermaid.min.js"));
   await copyFile(pkgFile("github-markdown-css/github-markdown.css"), join(outDir, "_archidocs", "vendor", "github-markdown.css"));
 
@@ -85,7 +87,8 @@ for (const art of content.artifacts) {
   try {
     if (art.error) throw new Error(art.error);
     if (art.format === "md") {
-      await write(`${art.path}/index.html`, markdownArtifactPage(ctx, art, renderMarkdown(art.body)));
+      art.rendered = renderMarkdown(art.body);
+      await write(`${art.path}/index.html`, markdownArtifactPage(ctx, art, art.rendered));
       await copyFile(art.file, join(outDir, art.path, "source.md"));
     } else {
       await write(`${art.path}/index.html`, htmlArtifactPage(ctx, art));
@@ -102,6 +105,8 @@ for (const mod of content.modules.values()) {
   await write(`${mod.path}/index.html`, modulePage(ctx, mod, readme));
 }
 await write("index.html", catalogPage(ctx));
+const search = searchIndex(ctx);
+await write("search.json", search.json);
 await write("404.html", notFoundPage());
 
 // Alias: la ruta real siempre gana sobre un alias.
@@ -126,6 +131,7 @@ const info = {
   artifacts: content.artifacts.length,
   warnings,
   quarantined,
+  search_bytes: Buffer.byteLength(search.json),
   duration_ms: 0,
   site_bytes: 0,
 };

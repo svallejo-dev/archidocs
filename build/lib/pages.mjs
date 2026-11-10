@@ -5,8 +5,8 @@ import { escapeHtml as e } from "./markdown.mjs";
 const LOGO = `<svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="2.5" width="18" height="19" rx="3" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M7.5 8h9M7.5 12h9M7.5 16h5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>`;
 const FAVICON = `data:image/svg+xml,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><rect x="2" y="2" width="20" height="20" rx="5" fill="#0969da"/><path d="M7 8.5h10M7 12h10M7 15.5h6" stroke="#fff" stroke-width="2" stroke-linecap="round"/></svg>`)}`;
 
-const STATUS_TONE = { draft: "", review: "attention", accepted: "success", superseded: "done", archived: "" };
-const TYPE_TONE = {
+export const STATUS_TONE = { draft: "", review: "attention", accepted: "success", superseded: "done", archived: "" };
+export const TYPE_TONE = {
   adr: "var(--ad-done)", rfc: "var(--ad-attention)", prd: "var(--ad-accent)", "design-doc": "var(--ad-success)",
   runbook: "var(--ad-danger)", report: "var(--ad-accent)", explainer: "var(--ad-attention)", note: "var(--ad-fg-muted)",
 };
@@ -27,6 +27,7 @@ function head({ title, root, extraHead = "" }) {
 <link rel="icon" href="${FAVICON}">
 <link rel="stylesheet" href="${root}_archidocs/v1/ui.css">
 <link rel="stylesheet" href="${root}_archidocs/site.css">
+<script src="${root}_archidocs/site.js" defer></script>
 ${extraHead}</head>`;
 }
 
@@ -66,14 +67,28 @@ export function moduleTrail(ctx, from, to) {
   return titles.join(" › ");
 }
 
+const SEARCH_ICON = `<svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" d="M10.68 11.74a6 6 0 0 1-7.92-8.98 6 6 0 0 1 8.98 7.92l3.04 3.04a.75.75 0 1 1-1.06 1.06ZM11.5 7a4.5 4.5 0 1 0-9 0 4.5 4.5 0 0 0 9 0Z"/></svg>`;
+
+// Caja de búsqueda compacta: envía al catálogo (?q=…). En un módulo, limita la búsqueda a ese módulo.
+function searchForm(ctx, page, scope) {
+  const root = rootPrefix(page);
+  const label = scope ? `Buscar en ${ctx.modules.get(scope)?.title || scope}` : "Buscar documentos";
+  return `<form class="ad-search" action="${root}" method="get" role="search">
+  ${SEARCH_ICON}<input type="search" name="q" placeholder="${e(label)}…" aria-label="${e(label)}" autocomplete="off"><kbd>/</kbd>
+  ${scope ? `<input type="hidden" name="module" value="${e(scope)}">` : ""}
+</form>
+<a class="ad-search-icon" href="${root}#buscar" title="Buscar" aria-label="Buscar">${SEARCH_ICON}</a>`;
+}
+
 // page: ruta de la página (para las URLs relativas); path: módulo al que pertenece; current: título del artifact.
-function appbar(ctx, page, path, current, actions = "") {
+// search: false en el catálogo (tiene su propio panel); scope: módulo al que se limita la búsqueda.
+function appbar(ctx, page, path, current, actions = "", { search = true, scope = "" } = {}) {
   const root = rootPrefix(page);
   return `<header class="ad-appbar">
   ${backLink(ctx, page, path, current)}
   <a class="ad-brand" href="${root}">${LOGO}<span>Archidocs</span></a>
   <nav class="ad-crumbs" aria-label="Ruta">${crumbs(ctx, page, path, current)}</nav>
-  <span class="ad-appbar__spacer"></span>
+  ${search ? searchForm(ctx, page, scope) : ""}
   ${actions ? `<div class="ad-appbar__actions">${actions}</div>` : ""}
 </header>`;
 }
@@ -129,20 +144,50 @@ function moduleCards(ctx, mods, fromPath) {
     .join("\n")}</div>`;
 }
 
+function count(list, key) {
+  const n = new Map();
+  for (const a of list) if (a.meta[key]) n.set(a.meta[key], (n.get(a.meta[key]) || 0) + 1);
+  return n;
+}
+
+function searchPanel(ctx) {
+  const types = count(ctx.artifacts, "type");
+  const statuses = count(ctx.artifacts, "status");
+  const opt = (value, label, n) => `<option value="${e(value)}">${e(label)}${n ? ` (${n})` : ""}</option>`;
+  const typeOpts = Object.keys(ctx.standard.types).filter((t) => types.has(t)).map((t) => opt(t, typeLabel(ctx, t), types.get(t)));
+  const statusOpts = Object.keys(ctx.standard.statuses).filter((s) => statuses.has(s)).map((s) => opt(s, ctx.standard.statuses[s], statuses.get(s)));
+  const modOpts = [...ctx.modules.values()].filter((m) => m.path).sort((a, b) => a.path.localeCompare(b.path))
+    .map((m) => opt(m.path, `${"\u00a0\u00a0".repeat(m.path.split("/").length - 1)}${m.title}`, m.total));
+  return `<section class="ad-searchpanel" id="buscar" role="search">
+  <label class="ad-searchbox">${SEARCH_ICON}<input id="ad-q" type="search" placeholder="Buscar por título, contenido, etiquetas, autor o módulo…" aria-label="Buscar documentos" autocomplete="off"><kbd>/</kbd></label>
+  <div class="ad-filters">
+    <select id="ad-f-type" aria-label="Tipo"><option value="">Todos los tipos</option>${typeOpts.join("")}</select>
+    <select id="ad-f-status" aria-label="Estado"><option value="">Todos los estados</option>${statusOpts.join("")}</select>
+    <select id="ad-f-module" aria-label="Módulo"><option value="">Todos los módulos</option>${modOpts.join("")}</select>
+    <select id="ad-f-sort" aria-label="Orden"><option value="">Más relevantes</option><option value="recent">Más recientes</option><option value="title">Título (A–Z)</option></select>
+    <button class="ad-btn" type="button" id="ad-clear" hidden>Limpiar</button>
+  </div>
+</section>`;
+}
+
 export function catalogPage(ctx) {
   const recent = [...ctx.artifacts].sort((a, b) => (b.updated?.getTime() || 0) - (a.updated?.getTime() || 0));
   const root = ctx.root;
   return `${head({ title: "Archidocs", root: "./" })}
 <body>
-${appbar(ctx, "", "", "")}
+${appbar(ctx, "", "", "", "", { search: false })}
 <main class="ad-page">
   <div class="ad-pagehead">
     <h1>Archidocs</h1>
     <p>${ctx.artifacts.length} artifacts en ${ctx.modules.size - 1} módulos</p>
   </div>
+  ${searchPanel(ctx)}
+  <section class="ad-section" id="ad-results" hidden aria-live="polite"><h2 id="ad-results-title"></h2><div class="ad-list" id="ad-results-list"></div></section>
+  <div id="ad-browse">
   ${root.children.length ? `<section class="ad-section"><h2>Módulos</h2>${moduleCards(ctx, root.children, "")}</section>` : ""}
   ${root.artifacts.length ? `<section class="ad-section"><h2>Sin módulo</h2>${artifactList(ctx, root.artifacts, "", { filters: false })}</section>` : ""}
   <section class="ad-section"><h2>Actualizados recientemente</h2>${artifactList(ctx, recent.slice(0, 30), "")}</section>
+  </div>
 </main>
 ${FILTER_SCRIPT}
 </body>
@@ -156,7 +201,7 @@ export function modulePage(ctx, mod, readmeHtml) {
   collect(mod);
   return `${head({ title: `${mod.title} · Archidocs`, root: rootPrefix(mod.path) })}
 <body>
-${appbar(ctx, mod.path, mod.path, "")}
+${appbar(ctx, mod.path, mod.path, "", "", { scope: mod.path })}
 <main class="ad-page">
   <div class="ad-pagehead">
     <h1>${e(mod.title)}</h1>

@@ -163,18 +163,19 @@ Errores git clasificados: rechazo por desfase → `pull --rebase` + reintento (m
 ### 5.5 Sitio generado
 
 ```
-/                              catálogo (filtros por tipo, autor, estado, módulo)
+/                              catálogo con búsqueda (?q=, type, status, module, sort)
 /<modulo>/                     índice del módulo
 /<modulo>/<slug>/              contenedor con barra + iframe sandbox (HTML) o MD renderizado
 /<modulo>/<slug>/source.md     fuente MD descargable
 /<alias>/                      redirect a la URL actual
-/_archidocs/v1/ui.css · vendor/ · build.json
+/_archidocs/v1/ui.css · site.js · vendor/ · build.json · search.json
 ```
 
 - **HTML:** la página contenedora (barra común: breadcrumb, tipo, estado, autor, fecha, enlace a historial) carga el HTML del autor con `<iframe sandbox="allow-scripts allow-popups allow-top-navigation-by-user-activation" srcdoc=…>` (origen opaco). El HTML crudo nunca se sirve como `.html` del sitio. Los diagramas archify van igual. Se inyecta `<base>` para rutas relativas.
 - **Markdown:** render estilo GitHub (`github-markdown-css`), HTML embebido **sanitizado**, Mermaid en el navegador desde `vendor/`.
 - `<meta name="robots" content="noindex">` en todas las páginas.
-- `build.json`: SHA, fecha, número de artifacts, avisos, cuarentenas, bytes del sitio.
+- `build.json`: SHA, fecha, número de artifacts, avisos, cuarentenas, bytes del sitio y del índice de búsqueda.
+- **Búsqueda:** el build genera `search.json` (metadatos, encabezados h2/h3 y hasta 6.000 caracteres del texto visible de cada artifact, MD o HTML). `site.js` busca en el navegador: sin tildes ni mayúsculas, todos los términos deben aparecer (AND), con más peso el título, luego etiquetas, tipo, módulo, encabezados, autor y contenido. Filtros por tipo, estado y módulo (incluye submódulos), orden por relevancia, fecha o título, y el estado en la URL para compartir una búsqueda. Cada página tiene una caja compacta (`/` o Ctrl/Cmd+K) que lleva al catálogo; dentro de un módulo, limita la búsqueda a ese módulo.
 
 ### 5.6 Módulos y enrutamiento de documentos
 
@@ -227,6 +228,7 @@ owners: [svallejo]
 | Skills fijadas a tag de release, checkout separado | Una skill rota no llega a todos; no hay estado atascado | Actualizar es explícito | > 1 release/semana → canales stable/beta |
 | Diagramas: fuentes en el repo, archify renderiza en la CI | Repo y clones pequeños | La CI necesita Chrome | Sitio > 500 MB → SVG estático + enlace al interactivo |
 | Validación: la skill corrige, la CI solo avisa (cuarentena si rompe el build) | Nadie se bloquea por un artifact ajeno | Puede publicarse contenido no conforme | > 10 % de artifacts con avisos → la CI excluye los no conformes |
+| Búsqueda en el navegador sobre un `search.json` propio | Sin servidor ni dependencias; filtra por metadatos del estándar | Índice completo en cada búsqueda; ranking simple | `search.json` > 2 MB (~350 artifacts con texto largo) → Pagefind (índice troceado) |
 | Librerías vendorizadas con hash | Sin dependencia de CDN; resiste CSP corporativa | Actualización manual | > 2 versiones mayores atrás → script de actualización |
 
 ## 7. Fronteras
@@ -306,6 +308,7 @@ Un solo contexto (publicación de artifacts). Relaciones externas: GitHub (almac
 | Plantillas | cerrado | Guía; metadatos obligatorios; la skill completa lo que falte | Usuario |
 | Metadatos | cerrado | Frontmatter / `<meta artifact:*>`; módulo por ruta | Usuario |
 | Render MD | cerrado | Build propio, estilo GitHub | Usuario |
+| Búsqueda | cerrado | Cliente sobre `search.json`; título, tipo, estado, módulo, autor, etiquetas y contenido | Usuario; se reabre si el índice > 2 MB |
 | Estándar de UI | cerrado | `ui.css` sobrio, claro/oscuro, enlazado y versionado | Usuario |
 | Diagramas | cerrado | Mermaid; en HTML vía archify renderizado en la CI | Usuario + red team |
 | Validación | cerrado | Skill corrige; CI avisa y pone en cuarentena | Usuario + red team |
@@ -339,7 +342,7 @@ Un solo contexto (publicación de artifacts). Relaciones externas: GitHub (almac
 | caching, load-balancing, dns | Descartados: los gestiona el hosting estático |
 | messaging-streaming, task-scheduling | Descartados salvo el chequeo diario programado |
 | sequencer, sharded-counters | Descartados: la identidad es la ruta |
-| distributed-search | Diferido |
+| distributed-search | Abierto en mínimo: índice estático en el build y búsqueda en el navegador (§5.5) |
 | distributed-logging | Descartado: sin servicio en ejecución |
 
 ### Rúbrica (0–5)
