@@ -18,3 +18,7 @@ tags:
 ## Propuesta
 
 Probar precios dinámicos en el 5 % del tráfico durante dos semanas.
+
+## Riesgos
+
+- Percepción de precios injustos.
