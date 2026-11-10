@@ -1,0 +1,4 @@
+#!/bin/sh
+# Lanzador del CLI: resuelve su ruta real aunque se invoque por symlink (~/.local/bin/archidocs).
+SELF=$(readlink -f "$0" 2>/dev/null || python3 -c 'import os,sys; print(os.path.realpath(sys.argv[1]))' "$0")
+exec node "$(dirname "$SELF")/archidocs.mjs" "$@"
