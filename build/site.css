@@ -111,3 +111,4 @@ body.ad-container { height: 100vh; display: flex; flex-direction: column; overfl
 .ad-container__meta .hide-sm { display: inline-flex; align-items: center; gap: var(--ad-space-3); }
 .markdown-body .anchor { float: left; margin-left: -22px; padding-right: 4px; line-height: inherit; color: var(--ad-fg-muted); opacity: 0; text-decoration: none; font-weight: 400; }
 .markdown-body :is(h1, h2, h3, h4):hover .anchor, .markdown-body .anchor:focus { opacity: 1; text-decoration: none; }
+.markdown-body pre.mermaid:not([data-processed]) { color: transparent; min-height: 120px; }
