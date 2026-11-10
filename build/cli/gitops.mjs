@@ -45,9 +45,15 @@ export async function ensureCheckout() {
   return CONTENT_DIR;
 }
 
-export async function instanceConfig(dir = CONTENT_DIR) {
+// Sin dir: la versión publicada (origin), no el árbol del clon, que nunca se actualiza.
+export async function instanceConfig(dir) {
   try {
-    return JSON.parse(await readFile(join(dir, "archidocs.config.json"), "utf8"));
+    if (dir) return JSON.parse(await readFile(join(dir, "archidocs.config.json"), "utf8"));
+    for (const ref of ["origin/HEAD", "origin/main"]) {
+      const r = git(["show", `${ref}:archidocs.config.json`], { allowFail: true });
+      if (r.ok) return JSON.parse(r.out);
+    }
+    throw new Error("sin archidocs.config.json en origin");
   } catch {
     return { branch: "main", sites: {}, allow_public: false };
   }
