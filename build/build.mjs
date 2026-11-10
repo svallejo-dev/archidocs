@@ -1,109 +1,145 @@
-// Fase 0: build mínimo. Genera _site/ con un catálogo provisional y build.json.
-// Las fases siguientes añaden render de Markdown, contenedor sandbox, índices por módulo y alias.
-import { mkdir, readdir, stat, writeFile } from "node:fs/promises";
-import { join, relative } from "node:path";
+// Build del sitio: artifacts/ → _site/ (un solo artefacto para GitHub Pages y Cloudflare).
+// Nunca falla por contenido: un artifact que rompe va a cuarentena y el resto se publica.
+import { copyFile, mkdir, readdir, rm, stat, writeFile } from "node:fs/promises";
+import { dirname, join } from "node:path";
 import { execFileSync } from "node:child_process";
+import { loadStandard, scanContent } from "./lib/content.mjs";
+import { renderMarkdown } from "./lib/markdown.mjs";
+import {
+  catalogPage, htmlArtifactPage, markdownArtifactPage, modulePage, notFoundPage, quarantinePage, redirectPage,
+} from "./lib/pages.mjs";
 
 const args = process.argv.slice(2);
-const out = args[args.indexOf("--out") + 1] || "_site";
+const out = args.includes("--out") ? args[args.indexOf("--out") + 1] : "_site";
 const root = new URL("..", import.meta.url).pathname;
-const artifactsDir = join(root, "artifacts");
+const outDir = join(root, out);
 
-function gitSha() {
-  if (process.env.GITHUB_SHA) return process.env.GITHUB_SHA;
+function git(...a) {
   try {
-    return execFileSync("git", ["rev-parse", "HEAD"], { cwd: root, stdio: ["ignore", "pipe", "ignore"] }).toString().trim();
+    return execFileSync("git", a, { cwd: root, stdio: ["ignore", "pipe", "ignore"] }).toString().trim();
   } catch {
-    return "unknown";
+    return "";
   }
 }
 
-async function walk(dir) {
-  const found = { modules: [], artifacts: [] };
-  let entries;
-  try {
-    entries = await readdir(dir, { withFileTypes: true });
-  } catch {
-    return found;
-  }
-  const names = new Set(entries.map((e) => e.name));
-  const rel = relative(artifactsDir, dir);
-  if (rel && (names.has("index.md") || names.has("index.html"))) {
-    found.artifacts.push(rel);
-    return found;
-  }
-  if (rel && names.has("README.md")) found.modules.push(rel);
-  for (const e of entries) {
-    if (!e.isDirectory() || e.name.startsWith(".") || e.name === "diagrams") continue;
-    const sub = await walk(join(dir, e.name));
-    found.modules.push(...sub.modules);
-    found.artifacts.push(...sub.artifacts);
-  }
-  return found;
+function repoUrl() {
+  if (process.env.GITHUB_REPOSITORY) return `${process.env.GITHUB_SERVER_URL || "https://github.com"}/${process.env.GITHUB_REPOSITORY}`;
+  const remote = git("remote", "get-url", "origin");
+  const m = remote.match(/github\.com[:/](.+?)(\.git)?$/);
+  return m ? `https://github.com/${m[1]}` : "";
+}
+
+async function write(rel, content) {
+  const file = join(outDir, rel);
+  await mkdir(dirname(file), { recursive: true });
+  await writeFile(file, content);
 }
 
 async function dirBytes(dir) {
   let total = 0;
-  for (const e of await readdir(dir, { withFileTypes: true })) {
-    const p = join(dir, e.name);
-    total += e.isDirectory() ? await dirBytes(p) : (await stat(p)).size;
+  for (const ent of await readdir(dir, { withFileTypes: true })) {
+    const p = join(dir, ent.name);
+    total += ent.isDirectory() ? await dirBytes(p) : (await stat(p)).size;
   }
   return total;
 }
 
-const escapeHtml = (s) =>
-  s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
+const pkgFile = (spec) => join(root, "node_modules", spec);
 
-const sha = gitSha();
-const { modules, artifacts } = await walk(artifactsDir);
-const outDir = join(root, out);
+async function writeVendor() {
+  await mkdir(join(outDir, "_archidocs", "v1"), { recursive: true });
+  await mkdir(join(outDir, "_archidocs", "vendor"), { recursive: true });
+  await copyFile(join(root, "standard", "ui", "v1", "ui.css"), join(outDir, "_archidocs", "v1", "ui.css"));
+  await copyFile(join(root, "build", "site.css"), join(outDir, "_archidocs", "site.css"));
+  await copyFile(pkgFile("mermaid/dist/mermaid.min.js"), join(outDir, "_archidocs", "vendor", "mermaid.min.js"));
+  await copyFile(pkgFile("github-markdown-css/github-markdown.css"), join(outDir, "_archidocs", "vendor", "github-markdown.css"));
+
+  const { readFile } = await import("node:fs/promises");
+  const hlLight = await readFile(pkgFile("highlight.js/styles/github.css"), "utf8");
+  const hlDark = await readFile(pkgFile("highlight.js/styles/github-dark.css"), "utf8");
+  await write("_archidocs/vendor/highlight.css",
+    `/* highlight.js github + github-dark */\n@media (prefers-color-scheme: light) {\n${hlLight}\n}\n@media (prefers-color-scheme: dark) {\n${hlDark}\n}\n.markdown-body pre code.hljs { padding: 0; background: transparent; }\n`);
+
+  const alertsDir = dirname(pkgFile("markdown-it-github-alerts/styles/github-base.css"));
+  const alerts = await Promise.all(
+    ["github-colors-light.css", "github-colors-dark-media.css", "github-base.css"].map((f) => readFile(join(alertsDir, f), "utf8"))
+  );
+  await write("_archidocs/vendor/alerts.css", alerts.join("\n"));
+}
+
+const started = Date.now();
+const standard = await loadStandard(root);
+const content = await scanContent(root, standard);
+const ctx = { standard, modules: content.modules, artifacts: content.artifacts, root: content.root, repoUrl: repoUrl() };
+const sha = process.env.GITHUB_SHA || git("rev-parse", "HEAD") || "unknown";
+
+await rm(outDir, { recursive: true, force: true });
 await mkdir(outDir, { recursive: true });
+await writeVendor();
 
-const list = artifacts.length
-  ? `<ul>${artifacts.map((a) => `<li><code>${escapeHtml(a)}</code></li>`).join("")}</ul>`
-  : "<p>Todavía no hay artifacts publicados.</p>";
+const warnings = [...content.warnings];
+const quarantined = [];
 
-await writeFile(
-  join(outDir, "index.html"),
-  `<!doctype html>
-<html lang="es">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="robots" content="noindex">
-<title>Archidocs</title>
-<style>
-  :root { color-scheme: light dark; --fg: #1f2328; --bg: #ffffff; --muted: #59636e; }
-  @media (prefers-color-scheme: dark) { :root { --fg: #e6edf3; --bg: #0d1117; --muted: #9198a1; } }
-  body { margin: 0; padding: 2rem 1rem; font: 16px/1.5 system-ui, sans-serif; color: var(--fg); background: var(--bg); }
-  main { max-width: 48rem; margin: 0 auto; }
-  footer { margin-top: 3rem; color: var(--muted); font-size: 0.85rem; }
-</style>
-</head>
-<body>
-<main>
-  <h1>Archidocs</h1>
-  ${list}
-  <footer>build <code>${sha.slice(0, 7)}</code> · ${modules.length} módulos · ${artifacts.length} artifacts</footer>
-</main>
-</body>
-</html>
-`
-);
+for (const art of content.artifacts) {
+  for (const w of art.warnings) warnings.push(`${art.path}: ${w}`);
+  try {
+    if (art.error) throw new Error(art.error);
+    if (art.format === "md") {
+      await write(`${art.path}/index.html`, markdownArtifactPage(ctx, art, renderMarkdown(art.body)));
+      await copyFile(art.file, join(outDir, art.path, "source.md"));
+    } else {
+      await write(`${art.path}/index.html`, htmlArtifactPage(ctx, art));
+    }
+  } catch (err) {
+    quarantined.push({ path: art.path, error: err.message });
+    await write(`${art.path}/index.html`, quarantinePage(ctx, art, err.message));
+  }
+}
 
-await writeFile(
-  join(outDir, "404.html"),
-  `<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="robots" content="noindex"><title>No encontrado · Archidocs</title></head><body><p>No existe. <a href="./">Volver al catálogo</a></p></body></html>\n`
-);
+for (const mod of content.modules.values()) {
+  if (!mod.path) continue;
+  const readme = mod.body.trim() ? renderMarkdown(mod.body.replace(/^#\s+.*\n+/, "")).html : "";
+  await write(`${mod.path}/index.html`, modulePage(ctx, mod, readme));
+}
+await write("index.html", catalogPage(ctx));
+await write("404.html", notFoundPage());
 
-const buildInfo = {
+// Alias: la ruta real siempre gana sobre un alias.
+const taken = new Set([...content.artifacts.map((a) => a.path), ...[...content.modules.keys()]]);
+for (const art of content.artifacts) {
+  for (const alias of art.meta.aliases) {
+    const a = String(alias).replace(/^\/+|\/+$/g, "");
+    if (!a || taken.has(a)) {
+      warnings.push(`${art.path}: alias "${alias}" choca con una ruta existente; se ignora`);
+      continue;
+    }
+    taken.add(a);
+    await write(`${a}/index.html`, redirectPage(a, art.path));
+  }
+}
+
+const info = {
   sha,
   built_at: new Date().toISOString(),
-  modules: modules.length,
-  artifacts: artifacts.length,
-  warnings: [],
-  quarantined: [],
+  standard_version: standard.version,
+  modules: content.modules.size - 1,
+  artifacts: content.artifacts.length,
+  warnings,
+  quarantined,
+  duration_ms: 0,
+  site_bytes: 0,
 };
-buildInfo.site_bytes = await dirBytes(outDir);
-await writeFile(join(outDir, "build.json"), JSON.stringify(buildInfo, null, 2) + "\n");
-console.log(`build ${sha.slice(0, 7)}: ${modules.length} módulos, ${artifacts.length} artifacts, ${buildInfo.site_bytes} bytes → ${out}/`);
+info.duration_ms = Date.now() - started;
+info.site_bytes = await dirBytes(outDir);
+await write("build.json", JSON.stringify(info, null, 2) + "\n");
+
+console.log(`build ${sha.slice(0, 7)}: ${info.modules} módulos, ${info.artifacts} artifacts, ${(info.site_bytes / 1e6).toFixed(2)} MB, ${info.duration_ms} ms`);
+if (warnings.length) console.log(`avisos (${warnings.length}):\n  - ${warnings.join("\n  - ")}`);
+if (quarantined.length) console.log(`cuarentena (${quarantined.length}):\n  - ${quarantined.map((q) => `${q.path}: ${q.error}`).join("\n  - ")}`);
+
+// En la CI, los avisos van al resumen del job.
+if (process.env.GITHUB_STEP_SUMMARY && (warnings.length || quarantined.length)) {
+  const { appendFile } = await import("node:fs/promises");
+  const lines = ["## Archidocs: avisos del build", "", ...warnings.map((w) => `- ${w}`), ...quarantined.map((q) => `- **cuarentena** ${q.path}: ${q.error}`), ""];
+  await appendFile(process.env.GITHUB_STEP_SUMMARY, lines.join("\n"));
+}

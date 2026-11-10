@@ -1,0 +1,21 @@
+{
+  "version": 1,
+  "required": ["type", "title", "author", "created", "updated", "status"],
+  "types": {
+    "adr": "ADR",
+    "rfc": "RFC",
+    "prd": "PRD",
+    "design-doc": "Design doc",
+    "runbook": "Runbook",
+    "report": "Reporte",
+    "explainer": "Explainer",
+    "note": "Nota"
+  },
+  "statuses": {
+    "draft": "Borrador",
+    "review": "En revisión",
+    "accepted": "Aceptado",
+    "superseded": "Reemplazado",
+    "archived": "Archivado"
+  }
+}

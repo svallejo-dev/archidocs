@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Reporte de conversión Q3</title>
+<meta name="artifact:type" content="report">
+<meta name="artifact:title" content="Reporte de conversión Q3">
+<meta name="artifact:author" content="Sebastian Vallejo">
+<meta name="artifact:created" content="2026-10-05">
+<meta name="artifact:updated" content="2026-11-09">
+<meta name="artifact:status" content="accepted">
+<meta name="artifact:tags" content="conversión, checkout">
+<style>
+  .bars { display: grid; gap: 10px; margin: 8px 0 4px; }
+  .bar { display: grid; grid-template-columns: 90px 1fr 56px; align-items: center; gap: 12px; font-size: 14px; }
+  .bar__track { height: 12px; border-radius: 6px; background: var(--ad-bg-muted); overflow: hidden; }
+  .bar__fill { height: 100%; border-radius: 6px; background: var(--ad-accent); width: 0; transition: width .8s ease; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Reporte de conversión Q3</h1>
+  <p class="ad-muted">Contenido ficticio · julio a septiembre de 2026</p>
+
+  <div class="ad-grid">
+    <div class="ad-card ad-kpi"><span class="ad-kpi__label">Conversión del checkout</span><span class="ad-kpi__value">62,4 %</span><span class="ad-kpi__delta ad-kpi__delta--up">▲ 1,8 pp vs Q2</span></div>
+    <div class="ad-card ad-kpi"><span class="ad-kpi__label">Abandono en pago</span><span class="ad-kpi__value">21,3 %</span><span class="ad-kpi__delta ad-kpi__delta--down">▲ 2,1 pp vs Q2</span></div>
+    <div class="ad-card ad-kpi"><span class="ad-kpi__label">Cobros duplicados</span><span class="ad-kpi__value">31</span><span class="ad-kpi__delta ad-kpi__delta--down">▲ 9 vs Q2</span></div>
+  </div>
+
+  <div class="ad-callout ad-callout--warning">
+    <span class="ad-callout__title">Hallazgo principal</span>
+    El abandono en el paso de pago subió en septiembre, coincidiendo con los timeouts de la pasarela. Ver el <a href="../../plataforma/pagos/adr-0001-reintentos-idempotentes/">ADR de reintentos idempotentes</a>.
+  </div>
+
+  <h2 id="por-mes">Conversión por mes</h2>
+  <div class="bars" id="bars"></div>
+
+  <h2 id="por-canal">Por canal</h2>
+  <table>
+    <thead><tr><th>Canal</th><th class="ad-num">Sesiones</th><th class="ad-num">Conversión</th></tr></thead>
+    <tbody>
+      <tr><td>Web</td><td class="ad-num">412.800</td><td class="ad-num">64,1 %</td></tr>
+      <tr><td>iOS</td><td class="ad-num">198.300</td><td class="ad-num">61,7 %</td></tr>
+      <tr><td>Android</td><td class="ad-num">176.950</td><td class="ad-num">58,9 %</td></tr>
+    </tbody>
+  </table>
+
+  <p><a href="#por-mes">↑ Volver a conversión por mes</a></p>
+</main>
+<script>
+  const data = [["Julio", 63.1], ["Agosto", 63.9], ["Septiembre", 60.2]];
+  const root = document.getElementById("bars");
+  for (const [label, value] of data) {
+    root.insertAdjacentHTML("beforeend", `<div class="bar"><span>${label}</span><div class="bar__track"><div class="bar__fill" data-v="${value}"></div></div><span class="ad-num">${value.toLocaleString("es")} %</span></div>`);
+  }
+  requestAnimationFrame(() => document.querySelectorAll(".bar__fill").forEach((el) => (el.style.width = el.dataset.v + "%")));
+</script>
+</body>
+</html>
