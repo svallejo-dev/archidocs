@@ -1,0 +1,11 @@
+{
+  "name": "archidocs",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Artifacts HTML/Markdown escritos con agentes LLM, versionados en git y publicados como sitio estático.",
+  "engines": { "node": ">=18" },
+  "scripts": {
+    "build": "node build/build.mjs --out _site"
+  }
+}
