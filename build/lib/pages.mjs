@@ -30,7 +30,7 @@ function head({ title, root, extraHead = "" }) {
 ${extraHead}</head>`;
 }
 
-function crumbs(ctx, path, current) {
+function crumbs(ctx, page, path, current) {
   const parts = path ? path.split("/") : [];
   const items = [];
   let acc = "";
@@ -39,17 +39,40 @@ function crumbs(ctx, path, current) {
     const mod = ctx.modules.get(acc);
     const label = mod ? mod.title : parts[i];
     const isLast = i === parts.length - 1 && !current;
-    items.push(isLast ? `<span class="current">${e(label)}</span>` : `<a href="${rootPrefix(path)}${acc}/">${e(label)}</a>`);
+    items.push(isLast ? `<span class="current">${e(label)}</span>` : `<a href="${rootPrefix(page)}${acc}/">${e(label)}</a>`);
   }
   if (current) items.push(`<span class="current">${e(current)}</span>`);
   return items.length ? `<span class="sep">/</span>${items.join('<span class="sep">/</span>')}` : "";
 }
 
-function appbar(ctx, path, current, actions = "") {
-  const root = rootPrefix(path);
+const BACK_ICON = `<svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" d="M7.78 12.53a.75.75 0 0 1-1.06 0L2.47 8.28a.75.75 0 0 1 0-1.06l4.25-4.25a.75.75 0 0 1 1.06 1.06L4.81 7h7.44a.75.75 0 0 1 0 1.5H4.81l2.97 2.97a.75.75 0 0 1 0 1.06Z"/></svg>`;
+
+// Botón de atrás determinista: lleva al módulo padre (o al catálogo), no depende del historial del navegador.
+function backLink(ctx, page, path, current) {
+  if (!path && !current) return "";
+  const root = rootPrefix(page);
+  const target = current ? path : path.split("/").slice(0, -1).join("/");
+  const label = target ? ctx.modules.get(target)?.title || target : "Catálogo";
+  return `<a class="ad-back" href="${target ? `${root}${target}/` : root}" title="Volver a ${e(label)}" aria-label="Volver a ${e(label)}">${BACK_ICON}</a>`;
+}
+
+// Ruta de módulos entre dos niveles, para mostrar dónde vive un artifact en listas anidadas.
+export function moduleTrail(ctx, from, to) {
+  if (!to || to === from) return "";
+  const parts = to.split("/");
+  const start = from ? from.split("/").length : 0;
+  const titles = [];
+  for (let i = start; i < parts.length; i++) titles.push(ctx.modules.get(parts.slice(0, i + 1).join("/"))?.title || parts[i]);
+  return titles.join(" › ");
+}
+
+// page: ruta de la página (para las URLs relativas); path: módulo al que pertenece; current: título del artifact.
+function appbar(ctx, page, path, current, actions = "") {
+  const root = rootPrefix(page);
   return `<header class="ad-appbar">
+  ${backLink(ctx, page, path, current)}
   <a class="ad-brand" href="${root}">${LOGO}<span>Archidocs</span></a>
-  <nav class="ad-crumbs" aria-label="Ruta">${crumbs(ctx, path, current)}</nav>
+  <nav class="ad-crumbs" aria-label="Ruta">${crumbs(ctx, page, path, current)}</nav>
   <span class="ad-appbar__spacer"></span>
   ${actions ? `<div class="ad-appbar__actions">${actions}</div>` : ""}
 </header>`;
@@ -63,8 +86,7 @@ const statusBadge = (ctx, s) =>
 
 function artifactRow(ctx, art, fromPath) {
   const href = `${rootPrefix(fromPath)}${art.path}/`;
-  const parentTitle = art.parent ? ctx.modules.get(art.parent)?.title : "";
-  const sub = [art.meta.author, parentTitle && fromPath !== art.parent ? parentTitle : ""].filter(Boolean).map(e).join(" · ");
+  const sub = [art.meta.author, moduleTrail(ctx, fromPath, art.parent)].filter(Boolean).map(e).join(" · ");
   return `<div class="ad-row" data-type="${e(art.meta.type || "")}">
   ${typeTag(ctx, art.meta.type)}
   <div class="ad-row__main"><a class="ad-row__title" href="${href}">${e(art.meta.title)}</a>${sub ? `<span class="ad-row__sub">${sub}</span>` : ""}</div>
@@ -112,7 +134,7 @@ export function catalogPage(ctx) {
   const root = ctx.root;
   return `${head({ title: "Archidocs", root: "./" })}
 <body>
-${appbar(ctx, "", "")}
+${appbar(ctx, "", "", "")}
 <main class="ad-page">
   <div class="ad-pagehead">
     <h1>Archidocs</h1>
@@ -134,7 +156,7 @@ export function modulePage(ctx, mod, readmeHtml) {
   collect(mod);
   return `${head({ title: `${mod.title} · Archidocs`, root: rootPrefix(mod.path) })}
 <body>
-${appbar(ctx, mod.path, "")}
+${appbar(ctx, mod.path, mod.path, "")}
 <main class="ad-page">
   <div class="ad-pagehead">
     <h1>${e(mod.title)}</h1>
@@ -184,7 +206,7 @@ export function markdownArtifactPage(ctx, art, rendered) {
     : "";
   return `${head({ title: `${title} · Archidocs`, root, extraHead: `<link rel="stylesheet" href="${root}_archidocs/vendor/github-markdown.css">\n<link rel="stylesheet" href="${root}_archidocs/vendor/highlight.css">\n<link rel="stylesheet" href="${root}_archidocs/vendor/alerts.css">\n` })}
 <body>
-${appbar(ctx, art.parent, title, docActions(ctx, art))}
+${appbar(ctx, art.path, art.parent, title, docActions(ctx, art))}
 <main class="ad-page${toc ? "" : " ad-page--narrow"}">
   <div class="ad-doclayout${toc ? " ad-doclayout--toc" : ""}">
     <div>
@@ -233,7 +255,7 @@ export function htmlArtifactPage(ctx, art) {
   const srcdoc = frameDocument(art, root).replace(/&/g, "&amp;").replace(/"/g, "&quot;");
   return `${head({ title: `${title} · Archidocs`, root })}
 <body class="ad-container">
-${appbar(ctx, art.parent, title, `<span class="ad-container__meta"><span class="hide-sm">${docMeta(ctx, art)}</span></span>${docActions(ctx, art)}`)}
+${appbar(ctx, art.path, art.parent, title, `<span class="ad-container__meta"><span class="hide-sm">${docMeta(ctx, art)}</span></span>${docActions(ctx, art)}`)}
 <iframe class="ad-frame" title="${e(title)}" sandbox="allow-scripts allow-popups allow-popups-to-escape-sandbox allow-top-navigation-by-user-activation" referrerpolicy="no-referrer" srcdoc="${srcdoc}"></iframe>
 </body>
 </html>
@@ -249,7 +271,7 @@ export function quarantinePage(ctx, art, message) {
   const root = rootPrefix(art.path);
   return `${head({ title: `Error · ${art.meta?.title || art.path} · Archidocs`, root })}
 <body>
-${appbar(ctx, art.parent, art.meta?.title || art.path, docActions(ctx, art))}
+${appbar(ctx, art.path, art.parent, art.meta?.title || art.path, docActions(ctx, art))}
 <main class="ad-page"><div class="ad-error ad-callout ad-callout--danger">
   <span class="ad-callout__title">Este artifact no se pudo publicar</span>
   <p>El build lo puso en cuarentena; el resto del sitio se publicó con normalidad.</p>

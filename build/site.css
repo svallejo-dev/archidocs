@@ -112,3 +112,22 @@ body.ad-container { height: 100vh; display: flex; flex-direction: column; overfl
 .markdown-body .anchor { float: left; margin-left: -22px; padding-right: 4px; line-height: inherit; color: var(--ad-fg-muted); opacity: 0; text-decoration: none; font-weight: 400; }
 .markdown-body :is(h1, h2, h3, h4):hover .anchor, .markdown-body .anchor:focus { opacity: 1; text-decoration: none; }
 .markdown-body pre.mermaid:not([data-processed]) { color: transparent; min-height: 120px; }
+
+/* Navegación: botón de atrás y breadcrumb siempre visible (se desplaza en horizontal si no cabe) */
+.ad-back {
+  flex: none; display: inline-grid; place-items: center; width: 32px; height: 32px;
+  color: var(--ad-fg-muted); border: 1px solid var(--ad-border); border-radius: var(--ad-radius); background: var(--ad-bg);
+}
+.ad-back:hover { color: var(--ad-fg); background: var(--ad-bg-muted); text-decoration: none; }
+.ad-brand { flex: none; }
+.ad-crumbs { flex: 1 1 auto; flex-wrap: nowrap; overflow-x: auto; white-space: nowrap; scrollbar-width: none; }
+.ad-crumbs::-webkit-scrollbar { display: none; }
+.ad-crumbs > * { flex: none; }
+.ad-crumbs .current { overflow: visible; }
+.ad-appbar__spacer { display: none; }
+.ad-appbar__actions, .ad-container__meta { flex: none; }
+@media (max-width: 640px) {
+  .ad-appbar { padding: 0 var(--ad-space-3); gap: var(--ad-space-2); }
+  .ad-brand span { display: none; }
+  .ad-appbar__actions .ad-btn { padding: 0 8px; }
+}
